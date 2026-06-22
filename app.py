@@ -52,7 +52,7 @@ def load_models():
     #  file ID for risk_classifier_clean.pkl                               #
     #  It looks like: 1A2B3C4D5E6F7G8H9I0J (from the shareable link)      #
     # ------------------------------------------------------------------ #
-    FILE_ID   = "1Ij7ay4dbqTHxz6X2wi7cIdcAKYtwhVCj"
+    FILE_ID   = "1IopJryoPhb3vua2JoysNoIirBGt8Z5Cf"
     MODEL_PATH = "risk_classifier_clean.pkl"
 
     if not os.path.exists(MODEL_PATH):
