@@ -1,4 +1,5 @@
 import os
+import re
 import joblib
 import numpy as np
 import pandas as pd
@@ -7,7 +8,7 @@ import streamlit as st
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Used Car Risk Checker",
-    page_icon="🚗",
+    page_icon="car",
     layout="centered",
 )
 
@@ -29,6 +30,8 @@ st.markdown("""
     .over   { background: #f8d7da; color: #721c24; border-left: 6px solid #dc3545; }
     .avoid  { background: #f5c6cb; color: #491217; border-left: 6px solid #a71d2a; }
     .detail { background: #f8f9fa; border-radius: 10px; padding: 1rem 1.5rem; margin-top: 1rem; font-size: 0.95rem; }
+    .vin-valid   { color: #155724; font-weight: 600; }
+    .vin-invalid { color: #721c24; font-weight: 600; }
     .stButton > button {
         background-color: #1a1a2e;
         color: white;
@@ -52,6 +55,18 @@ def load_models():
     feature_cols    = joblib.load("feature_cols.pkl")
     class_features  = joblib.load("classification_features_no_leakage.pkl")
     return price_model, risk_classifier, feature_cols, class_features
+
+
+# ── VIN validator ──────────────────────────────────────────────────────────────
+def validate_vin(vin):
+    vin = vin.strip().upper()
+    if len(vin) == 0:
+        return None, "No VIN entered"
+    if len(vin) != 17:
+        return False, f"VIN looks invalid — must be 17 characters (yours has {len(vin)})"
+    if not re.match(r'^[A-HJ-NPR-Z0-9]{17}$', vin):
+        return False, "VIN looks invalid — contains invalid characters (I, O, Q are not allowed)"
+    return True, "VIN looks valid"
 
 
 # ── Helper functions ───────────────────────────────────────────────────────────
@@ -96,13 +111,16 @@ def predict_buyer_risk(car_info, price_model, risk_clf, feature_cols, class_feat
     labels        = list(risk_clf.classes_)
     smart_prob    = probabilities[:, labels.index("smart buy")][0]
 
+    prob_dict = {label: round(prob * 100, 1) for label, prob in zip(labels, probabilities[0])}
+
     final = prediction
     if final == "smart buy" and smart_prob < 0.75:
         final = "fair deal"
 
     return {
         "final_category":    final,
-        "smart_probability": round(smart_prob, 3),
+        "smart_probability": round(smart_prob * 100, 2),
+        "prob_dict":         prob_dict,
         "actual_price":      round(df.loc[0, "price"], 2),
         "expected_price":    round(df.loc[0, "expected_price"], 2),
         "price_gap":         round(df.loc[0, "price_gap"], 2),
@@ -115,7 +133,7 @@ def predict_buyer_risk(car_info, price_model, risk_clf, feature_cols, class_feat
 
 
 # ── UI ─────────────────────────────────────────────────────────────────────────
-st.markdown('<p class="title">🚗 Used Car Risk Checker</p>', unsafe_allow_html=True)
+st.markdown('<p class="title">Used Car Risk Checker</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub">Enter the details of a car listing to see if it\'s a smart buy or a risk.</p>', unsafe_allow_html=True)
 
 price_model, risk_clf, feature_cols, class_features = load_models()
@@ -156,11 +174,17 @@ with st.form("car_form"):
             "wi","wy"
         ]))
 
-    submitted = st.form_submit_button("Check This Car →")
+    st.markdown("---")
+    vin_input = st.text_input("VIN Number (optional)", placeholder="e.g. 1HGBH41JXMN109186", max_chars=17)
+
+    submitted = st.form_submit_button("Check This Car")
 
 
 # ── Result ─────────────────────────────────────────────────────────────────────
 if submitted:
+    vin_valid, vin_message = validate_vin(vin_input)
+    vin_is_fake = not vin_valid if vin_valid is not None else True
+
     car_info = {
         "price":                  price,
         "year":                   year,
@@ -176,7 +200,7 @@ if submitted:
         "state":                  state,
         "lat":                    39.5,
         "long":                   -98.35,
-        "vin_is_fake_or_unknown": False,
+        "vin_is_fake_or_unknown": vin_is_fake,
     }
 
     with st.spinner("Analysing this listing..."):
@@ -186,28 +210,41 @@ if submitted:
             st.error(f"Something went wrong: {e}")
             st.stop()
 
-    cat  = r["final_category"].lower()
-    css  = "smart" if "smart" in cat else "fair" if "fair" in cat else "over" if "over" in cat else "avoid"
-    icons = {"smart": "✅", "fair": "⚠️", "over": "❌", "avoid": "🚫"}
-    icon  = icons.get(css, "📊")
+    cat   = r["final_category"].lower()
+    css   = "smart" if "smart" in cat else "fair" if "fair" in cat else "over" if "over" in cat else "avoid"
+    labels = {"smart": "Smart Buy", "fair": "Fair Deal", "over": "Overpriced", "avoid": "Avoid"}
+    label  = labels.get(css, r["final_category"].title())
 
     st.markdown(
-        f'<div class="result-box {css}">'
-        f'{icon} Verdict: <span style="text-transform:capitalize">{r["final_category"]}</span>'
-        f'</div>',
+        f'<div class="result-box {css}">Verdict: {label}</div>',
         unsafe_allow_html=True,
     )
 
     gap_sign = "+" if r["price_gap"] >= 0 else ""
 
+    if vin_valid is None:
+        vin_status_html = "<b>VIN Status:</b> Not provided"
+    elif vin_valid:
+        vin_status_html = '<b>VIN Status:</b> <span class="vin-valid">VIN looks valid</span>'
+    else:
+        vin_status_html = f'<b>VIN Status:</b> <span class="vin-invalid">{vin_message}</span>'
+
+    smart_conf = r["smart_probability"]
+    conf_color = "#28a745" if smart_conf >= 75 else "#ffc107" if smart_conf >= 40 else "#dc3545"
+
     st.markdown(f"""
 <div class="detail">
-    <b>💰 Listing Price:</b> ${r['actual_price']:,.0f}<br>
-    <b>📊 Model's Expected Price:</b> ${r['expected_price']:,.0f}<br>
-    <b>📉 Price Difference:</b> {gap_sign}${r['price_gap']:,.0f} ({gap_sign}{r['price_gap_percent']:.1f}%)<br><br>
-    <b>🗓 Vehicle Age:</b> {r['vehicle_age']} years &nbsp;|&nbsp;
-    <b>🛣 Mileage Risk:</b> {r['mileage_risk']} &nbsp;|&nbsp;
-    <b>📋 Title Risk:</b> {r['title_risk']}
+    <b>Listing Price:</b> ${r['actual_price']:,.0f}<br>
+    <b>Model Expected Price:</b> ${r['expected_price']:,.0f}<br>
+    <b>Price Difference:</b> {gap_sign}${r['price_gap']:,.0f} ({gap_sign}{r['price_gap_percent']:.1f}%)<br><br>
+    <b>Vehicle Age:</b> {r['vehicle_age']} years &nbsp;|&nbsp;
+    <b>Mileage Risk:</b> {r['mileage_risk']} &nbsp;|&nbsp;
+    <b>Title Risk:</b> {r['title_risk']}<br><br>
+    {vin_status_html}<br><br>
+    <b>Smart Buy Confidence:</b> <span style="color:{conf_color}; font-weight:700;">{smart_conf:.2f}%</span>
+    <div style="background:#e9ecef; border-radius:8px; height:12px; margin-top:6px;">
+        <div style="background:{conf_color}; width:{min(smart_conf,100):.1f}%; height:12px; border-radius:8px;"></div>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
