@@ -47,22 +47,23 @@ st.markdown("""
 # ── Download large model from Google Drive ─────────────────────────────────────
 @st.cache_resource
 def load_models():
-    # ------------------------------------------------------------------ #
-    #  IMPORTANT: Replace the FILE_ID below with YOUR actual Google Drive  #
-    #  file ID for risk_classifier_clean.pkl                               #
-    #  It looks like: 1A2B3C4D5E6F7G8H9I0J (from the shareable link)      #
-    # ------------------------------------------------------------------ #
-    FILE_ID   = "1XS95yPWjmKekx6MBCWZIyoN5cQqBh4qG"
+    FILE_ID = "1IopJryoPhb3vua2JoysNoIirBGt8Z5Cf"
     MODEL_PATH = "risk_classifier_clean.pkl"
 
     if not os.path.exists(MODEL_PATH):
-        try:
-            import gdown
-            url = f"https://drive.google.com/uc?id={FILE_ID}"
-            gdown.download(url, MODEL_PATH, quiet=False)
-        except Exception as e:
-            st.error(f"Could not download the risk model: {e}")
-            st.stop()
+        with st.spinner("Downloading model... this may take a minute"):
+            import requests
+            session = requests.Session()
+            url = "https://drive.google.com/uc?export=download"
+            response = session.get(url, params={"id": FILE_ID}, stream=True)
+            for key, value in response.cookies.items():
+                if key.startswith("download_warning"):
+                    response = session.get(url, params={"id": FILE_ID, "confirm": value}, stream=True)
+                    break
+            with open(MODEL_PATH, "wb") as f:
+                for chunk in response.iter_content(32768):
+                    if chunk:
+                        f.write(chunk)
 
     price_model      = joblib.load("best_price_model.pkl")
     risk_classifier  = joblib.load(MODEL_PATH)
