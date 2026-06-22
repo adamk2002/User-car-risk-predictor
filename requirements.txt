@@ -2,4 +2,3 @@ pandas
 numpy==1.26.4
 scikit-learn==1.6.1
 joblib
-gdown
