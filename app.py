@@ -53,13 +53,8 @@ def load_models():
     if not os.path.exists(MODEL_PATH):
         with st.spinner("Downloading model... this may take a minute"):
             import requests
-            session = requests.Session()
-            url = "https://drive.google.com/uc?export=download"
-            response = session.get(url, params={"id": FILE_ID}, stream=True)
-            for key, value in response.cookies.items():
-                if key.startswith("download_warning"):
-                    response = session.get(url, params={"id": FILE_ID, "confirm": value}, stream=True)
-                    break
+            url = "https://huggingface.co/Adam2002khay/used-car-risk-model/resolve/main/risk_classifier_clean.pkl"
+            response = requests.get(url, stream=True)
             with open(MODEL_PATH, "wb") as f:
                 for chunk in response.iter_content(32768):
                     if chunk:
