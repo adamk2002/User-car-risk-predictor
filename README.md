@@ -15,5 +15,5 @@ Because the dataset is too large to upload to GitHub, the full dataset is not in
 Dataset link:
 https://www.kaggle.com/datasets/austinreese/craigslist-carstrucks-data
 
-# Note: 
+# Notebook Note: 
 cleaned.ipynb continues the code from project.ipynb after the dataset was cleaned and saved.
